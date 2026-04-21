@@ -2,7 +2,8 @@
 
 AI-powered job application tracker with a LangGraph agent. Track applications, upload your resume, paste a job description, and get a semantic match score plus concrete resume-improvement suggestions — all grounded in an LLM that can reason over your actual pipeline.
 
-**Tech stack:** React · Vite · Tailwind v4 · FastAPI · SQLAlchemy · PostgreSQL (Supabase) · LangGraph · LangChain · Groq (Llama 3.3 70B)
+**Live demo:** https://jobscope-ai-yov1.vercel.app
+**Tech stack:** React · Vite · Tailwind v4 · FastAPI · SQLAlchemy · PostgreSQL (Supabase) · LangGraph · LangChain · Groq (Llama 3.3 70B) · Vercel · Railway
 
 ---
 
@@ -126,9 +127,15 @@ frontend/
   vite.config.js
 ```
 
-## Status
+## Deployment
 
-Frontend and backend work end-to-end locally against Supabase + Groq. Not yet deployed to Vercel/Railway.
+| Layer | Host | URL |
+|---|---|---|
+| Frontend | Vercel | https://jobscope-ai-yov1.vercel.app |
+| Backend  | Railway | https://jobscope-ai-production.up.railway.app |
+| Database | Supabase | (private) |
+
+The backend reads `DATABASE_URL` and `GROQ_API_KEY` from Railway environment variables. The frontend reads `VITE_API_URL` at build time on Vercel. CORS on the backend allows any `*.vercel.app` origin so preview deployments work without config changes.
 
 ## License
 
