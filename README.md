@@ -137,6 +137,10 @@ frontend/
 
 The backend reads `DATABASE_URL` and `GROQ_API_KEY` from Railway environment variables. The frontend reads `VITE_API_URL` at build time on Vercel. CORS on the backend allows any `*.vercel.app` origin so preview deployments work without config changes.
 
+## Deep dive
+
+For a full retrospective — build timeline, file-by-file code walkthrough, every bug we hit and how we fixed it, and design tradeoffs — see [docs/PROJECT_WALKTHROUGH.md](docs/PROJECT_WALKTHROUGH.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
