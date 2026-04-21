@@ -56,7 +56,7 @@ export default function AddJob() {
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-sm text-slate-300">Company *</label>
             <input
@@ -77,7 +77,7 @@ export default function AddJob() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-sm text-slate-300">Status</label>
             <select
@@ -101,7 +101,7 @@ export default function AddJob() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="mb-1 block text-sm text-slate-300">URL</label>
             <input

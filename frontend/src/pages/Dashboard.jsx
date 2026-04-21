@@ -83,13 +83,13 @@ export default function Dashboard() {
       </div>
 
       {!resume && (
-        <div className="flex items-center justify-between rounded-md border border-amber-700 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-md border border-amber-700 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
           <span>
             No resume uploaded yet — upload one to enable JD analysis and match scoring.
           </span>
           <Link
             to="/resume"
-            className="rounded-md bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-100 ring-1 ring-amber-500/40 hover:bg-amber-500/30"
+            className="self-start sm:self-auto rounded-md bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-100 ring-1 ring-amber-500/40 hover:bg-amber-500/30"
           >
             Upload resume
           </Link>
@@ -116,7 +116,8 @@ export default function Dashboard() {
             No applications yet. Add one from the Add Job page.
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="text-left text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-2 font-medium">Company</th>
@@ -171,6 +172,7 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

@@ -48,7 +48,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-10rem)] flex-col">
+    <div className="flex h-[calc(100vh-14rem)] sm:h-[calc(100vh-10rem)] flex-col">
       <div>
         <h1 className="text-2xl font-semibold text-white">Chat</h1>
         <p className="text-sm text-slate-400">
