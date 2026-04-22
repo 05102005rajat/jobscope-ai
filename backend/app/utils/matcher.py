@@ -17,14 +17,32 @@ from langchain_groq import ChatGroq
 _SYSTEM = """You compare a candidate's resume against a job description.
 
 For each JD skill, decide whether the resume covers it:
-- MATCHED: the resume has the skill directly or a clearly equivalent / broader skill.
-    "Azure OpenAI"              covers "OpenAI"
-    "LLM" / "Large Language Models" covers "LLM APIs"
-    "PostgreSQL"                covers "SQL"
-    "React"                     covers "modern JS framework"
-- MISSING: the resume doesn't cover it, even loosely.
+- MATCHED: the resume has the skill directly OR a clearly equivalent /
+  broader / specific-instance-of skill. Be generous about equivalents —
+  tools in the same category count. Examples of valid coverage:
+    "Azure OpenAI" / "Groq" / "OpenAI SDK"      covers "LLM APIs"
+    "Git" / "GitHub"                             covers "Version Control"
+    "Python" / "Java" / "C++" / "C#"             covers "OOP" / "Object-Oriented Programming"
+    "RESTful API endpoints" + backend work       covers "Backend System Integration"
+    "Azure OpenAI"                               covers "OpenAI"
+    "LLM" / "Large Language Models"              covers "LLM APIs"
+    "PostgreSQL" / "MySQL"                       covers "SQL"
+    "React" / "Vue" / "Angular"                  covers "modern JS framework"
+    "RPA workflows" / "n8n" / "Zapier"           covers "workflow automation" / "automation tools"
+    "FastAPI" / "Flask" / "Express"              covers "REST APIs" / "building APIs"
+    "Docker" + "CI/CD" + cloud deploy            covers "deployed applications"
+    a CS degree in progress                      covers "Computer Science" / "CS degree"
 
-Be reasonably generous on equivalents but do NOT invent coverage.
+- ALTERNATIVE / "ANY ONE OF" skills: if the JD skill is a combined entry
+  like "C# / Python / Java (any one)" or "OpenAI / Anthropic / similar",
+  it is MATCHED when the resume covers ANY ONE of the listed options.
+  Do not require all of them.
+
+- MISSING: the resume doesn't cover it, even loosely, and no reasonable
+  equivalent is present.
+
+Be reasonably generous on equivalents but do NOT invent coverage that
+isn't somewhere in the resume.
 
 Return ONLY a JSON object (no prose, no markdown):
 {
@@ -40,7 +58,8 @@ Suggestions must be:
 - SPECIFIC: reference real phrases from the resume and the JD
 - ACTIONABLE: say what to add, rewrite, or reframe
 - 3 to 5 bullets, highest-impact first
-- Focus on closing missing gaps, then on terminology alignment
+- Focus on closing truly-missing gaps first, then on terminology alignment
+- Do NOT suggest rewrites for skills you already marked as matched.
 
 Bad: "Add more keywords."
 Good: "Your Adani RAG chatbot already calls LLM APIs — rewrite that bullet

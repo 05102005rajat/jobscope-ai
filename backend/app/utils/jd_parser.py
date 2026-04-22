@@ -26,16 +26,30 @@ INCLUDE:
   "orbital mechanics", "GAAP", "clinical trials", "FDA regulation",
   "CAD design", "finite-element analysis", "cross-functional teamwork",
   "financial modeling", "supply chain" — anything the job actually needs done.
-- Degree or enrollment requirements if explicitly stated as a bar
-  (e.g. "STEM program enrollment", "BS in Computer Science").
+- Degree or enrollment requirements ONLY when phrased as a hard bar with
+  language like "required", "must have", "minimum", "BS required".
+  Do NOT extract degrees from soft framing like "You might be a great fit
+  if you're pursuing...", "Preferred qualifications", or "Nice to have".
+
+ALTERNATIVES (very important):
+- When the JD lists alternatives — "C#, Python, or Java", "at least one of
+  X/Y/Z", "OpenAI, Anthropic, etc.", "A or B" — emit ONE combined skill
+  string, not separate entries. Format: "C# / Python / Java (any one)"
+  or "OpenAI / Anthropic / similar LLM provider".
+- Do not split alternatives into separate missing skills — that penalizes
+  candidates who satisfy the clause with one of the options.
 
 IGNORE:
+- The job title itself (e.g. "Software Engineering Intern", "CS Intern",
+  "AI Development Lead"). Titles are not skills.
 - EEO / equal-opportunity / non-discrimination statements.
 - Export-control / ITAR / citizenship disclaimers.
 - "We use AI tools in hiring" or applicant-tracking / privacy disclaimers.
   These often say "AI" in boilerplate — DO NOT extract "AI" from them.
 - Salary ranges, benefits lists, location, employment type.
 - Company descriptions and mission statements.
+- GPA thresholds, class-standing (Junior/Senior), or enrollment status
+  unless paired with a specific technical bar.
 - Soft skills like "strong communicator", "passionate", "team player"
   unless the JD explicitly frames them as a concrete requirement (e.g.
   "excellent written communication" stays out; "experience presenting
