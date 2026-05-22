@@ -32,3 +32,8 @@ def startup():
 @app.get("/")
 def root():
     return {"message": "JobScope AI API is running"}
+
+
+@app.get("/api/health")
+def health():
+    return {"ok": True}
