@@ -144,17 +144,20 @@ def get_improvement_suggestions() -> str:
     if not analyses:
         return "No analyses yet. Analyze a few JDs first to get suggestions."
 
-    missing: set[str] = set()
+    missing_counts: dict[str, int] = {}
     suggestions: list[str] = []
     for a in analyses:
         if a.missing_skills:
-            missing.update(json.loads(a.missing_skills))
+            for s in json.loads(a.missing_skills):
+                missing_counts[s] = missing_counts.get(s, 0) + 1
         if a.suggestions:
             suggestions.extend(json.loads(a.suggestions))
 
+    top_missing = sorted(missing_counts, key=missing_counts.get, reverse=True)[:10]
+
     return (
         f"Based on {len(analyses)} recent analyses.\n"
-        f"Most commonly missing skills: {', '.join(list(missing)[:10]) or 'none'}\n"
+        f"Most commonly missing skills: {', '.join(top_missing) or 'none'}\n"
         f"Recommendations:\n"
         + "\n".join(f"  - {s}" for s in list(dict.fromkeys(suggestions))[:5])
     )
