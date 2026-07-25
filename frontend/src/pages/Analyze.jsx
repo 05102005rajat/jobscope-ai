@@ -44,7 +44,9 @@ export default function Analyze() {
     setJobId(id);
     if (id) {
       const job = jobs.find((j) => String(j.id) === id);
-      if (job?.jd_text) setJdText(job.jd_text);
+      setJdText(job?.jd_text || "");
+    } else {
+      setJdText("");
     }
   };
 

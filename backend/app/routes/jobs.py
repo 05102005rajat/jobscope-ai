@@ -16,7 +16,7 @@ def get_jobs(
 ):
     query = db.query(Job)
     if status:
-        query = query.filter(Job.status == status)
+        query = query.filter(Job.status == status.lower())
     if company:
         query = query.filter(Job.company.ilike(f"%{company}%"))
     return query.order_by(Job.applied_date.desc()).all()
