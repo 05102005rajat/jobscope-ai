@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db, Resume
-from app.utils.resume_parser import extract_text_from_pdf, extract_skills
+from app.utils.resume_parser import extract_text_from_pdf, extract_skills, InvalidPDFError
 import json
 
 router = APIRouter()
@@ -9,11 +9,17 @@ router = APIRouter()
 
 @router.post("/resume")
 async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if not file.filename.endswith(".pdf"):
+    if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     content = await file.read()
-    raw_text = extract_text_from_pdf(content)
+    try:
+        raw_text = extract_text_from_pdf(content)
+    except InvalidPDFError:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read this file as a PDF. It may be corrupted, encrypted, or not actually a PDF.",
+        )
     skills = extract_skills(raw_text)
 
     db_resume = Resume(
