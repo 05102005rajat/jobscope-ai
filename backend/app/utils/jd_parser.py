@@ -6,11 +6,14 @@ call fails — keeps the app functional if Groq is unreachable).
 """
 
 import json
+import logging
 import os
 import re
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
+
+logger = logging.getLogger(__name__)
 
 
 _SYSTEM = """You extract real, relevant skills and requirements from resume or \
@@ -65,6 +68,22 @@ _llm = ChatGroq(
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
+# Used only after a parse failure. At temperature 0 a malformed response tends
+# to repeat verbatim on retry (Groq's decoding is deterministic-ish at temp 0),
+# so a blind identical retry rarely recovers anything. Nudging the temperature
+# up slightly for the retry actually changes the sample instead of re-hitting
+# the same bad output.
+_llm_retry = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    temperature=0.3,
+    api_key=os.getenv("GROQ_API_KEY"),
+)
+
+_RETRY_NUDGE = (
+    "That response was not a valid JSON array. Reply again with ONLY a JSON "
+    "array of strings — no prose, no markdown fences, no keys."
+)
+
 
 def _parse_json_array(raw: str) -> list[str] | None:
     s = raw.strip()
@@ -87,25 +106,50 @@ def _parse_json_array(raw: str) -> list[str] | None:
 
 
 def _extract_with_llm(text: str) -> list[str] | None:
-    for _ in range(2):
+    messages = [
+        SystemMessage(content=_SYSTEM),
+        HumanMessage(content=text[:12000]),
+    ]
+    llm = _llm
+    last_err: Exception | None = None
+    for attempt in range(3):
         try:
-            resp = _llm.invoke(
-                [
-                    SystemMessage(content=_SYSTEM),
-                    HumanMessage(content=text[:12000]),
-                ]
-            )
-            skills = _parse_json_array(resp.content)
-            if skills is not None:
-                # Dedupe case-insensitively but preserve the LLM's preferred casing
-                seen: dict[str, str] = {}
-                for s in skills:
-                    key = s.lower()
-                    if key not in seen:
-                        seen[key] = s
-                return list(seen.values())
-        except Exception:
+            resp = llm.invoke(messages)
+        except Exception as exc:
+            last_err = exc
+            logger.warning("jd_parser: Groq call failed on attempt %d: %s", attempt + 1, exc)
+            llm = _llm_retry
             continue
+
+        last_err = None
+        skills = _parse_json_array(resp.content)
+        if skills is not None:
+            # Dedupe case-insensitively but preserve the LLM's preferred casing
+            seen: dict[str, str] = {}
+            for s in skills:
+                key = s.lower()
+                if key not in seen:
+                    seen[key] = s
+            return list(seen.values())
+
+        # Malformed JSON: re-ask instead of blindly resending the identical
+        # prompt, and switch to a slightly higher temperature so the retry
+        # isn't just re-sampling the same broken output.
+        logger.warning(
+            "jd_parser: unparseable LLM response on attempt %d: %r",
+            attempt + 1,
+            resp.content[:300],
+        )
+        messages = messages + [
+            AIMessage(content=resp.content),
+            HumanMessage(content=_RETRY_NUDGE),
+        ]
+        llm = _llm_retry
+
+    if last_err is not None:
+        logger.warning("jd_parser: all Groq attempts failed, falling back to regex: %s", last_err)
+    else:
+        logger.warning("jd_parser: all Groq attempts returned unparseable JSON, falling back to regex")
     return None
 
 
@@ -140,4 +184,9 @@ def extract_jd_skills(text: str) -> list[str]:
     llm_result = _extract_with_llm(text)
     if llm_result is not None:
         return llm_result
-    return _extract_with_regex(text)
+    fallback = _extract_with_regex(text)
+    logger.warning(
+        "jd_parser: using regex fallback (%d skills) — LLM extraction unavailable",
+        len(fallback),
+    )
+    return fallback

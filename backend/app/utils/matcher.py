@@ -7,11 +7,14 @@ Falls back to exact case-insensitive set comparison if the LLM call fails.
 """
 
 import json
+import logging
 import os
 import re
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
+
+logger = logging.getLogger(__name__)
 
 
 _SYSTEM = """You compare a candidate's resume against a job description.
@@ -71,8 +74,25 @@ Good: "No OCR experience shown. Add a small OCR project using Tesseract
 
 _llm = ChatGroq(
     model="llama-3.3-70b-versatile",
-    temperature=0.1,
+    temperature=0.0,
     api_key=os.getenv("GROQ_API_KEY"),
+)
+
+# Used only after a parse/validation failure on the first attempt. A blind
+# identical retry at temperature 0 tends to reproduce the same malformed or
+# incomplete output, so the retry nudges the temperature up slightly to force
+# a genuinely different sample.
+_llm_retry = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    temperature=0.3,
+    api_key=os.getenv("GROQ_API_KEY"),
+)
+
+_RETRY_NUDGE = (
+    "That response was not a valid JSON object, or it did not classify every "
+    "JD skill as matched or missing. Reply again with ONLY a JSON object of "
+    'the form {"matched": [...], "missing": [...], "suggestions": [...]} '
+    "covering every JD skill exactly once."
 )
 
 
@@ -120,32 +140,51 @@ def compare(
         "jd_excerpt": (jd_text or "")[:3500],
     }
 
-    for _ in range(2):
+    messages = [
+        SystemMessage(content=_SYSTEM),
+        HumanMessage(content=json.dumps(payload)),
+    ]
+    llm = _llm
+    for attempt in range(3):
         try:
-            resp = _llm.invoke(
-                [
-                    SystemMessage(content=_SYSTEM),
-                    HumanMessage(content=json.dumps(payload)),
-                ]
-            )
-            data = _parse_json_object(resp.content)
-            if not data:
-                continue
+            resp = llm.invoke(messages)
+        except Exception as exc:
+            logger.warning("matcher: Groq call failed on attempt %d: %s", attempt + 1, exc)
+            llm = _llm_retry
+            continue
+
+        data = _parse_json_object(resp.content)
+        if data:
             matched = [s for s in data.get("matched", []) if isinstance(s, str)]
             missing = [s for s in data.get("missing", []) if isinstance(s, str)]
             suggestions = [s for s in data.get("suggestions", []) if isinstance(s, str)]
 
             # Sanity check: every JD skill classified exactly once
             classified = {s.lower() for s in matched} | {s.lower() for s in missing}
-            if not {s.lower() for s in jd_skills}.issubset(classified):
-                continue
+            if {s.lower() for s in jd_skills}.issubset(classified):
+                return {
+                    "matched": matched,
+                    "missing": missing,
+                    "suggestions": suggestions,
+                }
+            logger.warning(
+                "matcher: response left JD skills unclassified on attempt %d", attempt + 1
+            )
+        else:
+            logger.warning(
+                "matcher: unparseable LLM response on attempt %d: %r",
+                attempt + 1,
+                resp.content[:300],
+            )
 
-            return {
-                "matched": matched,
-                "missing": missing,
-                "suggestions": suggestions,
-            }
-        except Exception:
-            continue
+        # Re-ask instead of blindly resending the identical prompt, and switch
+        # to a slightly higher temperature so the retry isn't just
+        # re-sampling the same broken/incomplete output.
+        messages = messages + [
+            AIMessage(content=resp.content),
+            HumanMessage(content=_RETRY_NUDGE),
+        ]
+        llm = _llm_retry
 
+    logger.warning("matcher: all Groq attempts failed, falling back to exact set comparison")
     return _fallback(resume_skills, jd_skills)
