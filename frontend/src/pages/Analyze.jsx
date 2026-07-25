@@ -40,6 +40,14 @@ export default function Analyze() {
     });
   }, [preselectJobId]);
 
+  const onSelectJob = (id) => {
+    setJobId(id);
+    if (id) {
+      const job = jobs.find((j) => String(j.id) === id);
+      if (job?.jd_text) setJdText(job.jd_text);
+    }
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     if (!jdText.trim()) return;
@@ -90,7 +98,7 @@ export default function Analyze() {
           <select
             className={inputCls}
             value={jobId}
-            onChange={(e) => setJobId(e.target.value)}
+            onChange={(e) => onSelectJob(e.target.value)}
           >
             <option value="">— none —</option>
             {jobs.map((j) => (
