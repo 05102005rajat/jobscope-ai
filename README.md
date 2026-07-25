@@ -132,10 +132,10 @@ frontend/
 | Layer | Host | URL |
 |---|---|---|
 | Frontend | Vercel | https://jobscope-ai-yov1.vercel.app |
-| Backend  | Railway | https://jobscope-ai-production.up.railway.app |
+| Backend  | Hugging Face Spaces | https://rajatc1-jobscope-api.hf.space |
 | Database | Supabase | (private) |
 
-The backend reads `DATABASE_URL` and `GROQ_API_KEY` from Railway environment variables. The frontend reads `VITE_API_URL` at build time on Vercel. CORS on the backend allows any `*.vercel.app` origin so preview deployments work without config changes.
+The backend reads `DATABASE_URL`, `GROQ_API_KEY`, and `API_KEY` from the HF Space's repository secrets. The frontend reads `VITE_API_URL` and `VITE_API_KEY` at build time on Vercel — `VITE_API_KEY` must match the backend's `API_KEY` or every `/api/*` call gets a 401. CORS on the backend allows any `*.vercel.app` origin so preview deployments work without config changes.
 
 ## Deep dive
 

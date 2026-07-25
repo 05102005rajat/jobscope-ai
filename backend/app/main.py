@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.auth import verify_api_key
 from app.database import init_db
 from app.routes import jobs, analysis, chat, resume
 
@@ -18,10 +19,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(jobs.router, prefix="/api", tags=["Jobs"])
-app.include_router(resume.router, prefix="/api", tags=["Resume"])
-app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
-app.include_router(chat.router, prefix="/api", tags=["Chat"])
+app.include_router(jobs.router, prefix="/api", tags=["Jobs"], dependencies=[Depends(verify_api_key)])
+app.include_router(resume.router, prefix="/api", tags=["Resume"], dependencies=[Depends(verify_api_key)])
+app.include_router(analysis.router, prefix="/api", tags=["Analysis"], dependencies=[Depends(verify_api_key)])
+app.include_router(chat.router, prefix="/api", tags=["Chat"], dependencies=[Depends(verify_api_key)])
 
 
 @app.on_event("startup")
