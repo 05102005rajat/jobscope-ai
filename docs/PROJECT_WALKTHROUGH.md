@@ -10,7 +10,7 @@ A full account of what was built, why each decision was made, what went wrong, a
 |---|---|---|
 | **GitHub** | Git hosting, source-of-truth for code | https://github.com/05102005rajat/jobscope-ai |
 | **Vercel** | Frontend hosting (React). Auto-deploys from GitHub pushes. | https://jobscope-ai-yov1.vercel.app |
-| **Railway** | Backend hosting (FastAPI). Auto-deploys Python from GitHub. | https://jobscope-ai-production.up.railway.app |
+| **Hugging Face Spaces** | Current backend hosting (Dockerized FastAPI). Originally deployed to Railway (Phase 12 below); moved to HF Spaces in Phase 15 for a free tier that doesn't sleep the way the Railway free tier did. | https://rajatc1-jobscope-api.hf.space |
 | **Supabase** | Managed PostgreSQL. Free tier. We use the Transaction Pooler URL. | supabase.com |
 | **Groq** | LLM inference provider — hosts Llama 3.3 70B. Faster and cheaper than OpenAI for this workload. | https://console.groq.com |
 
@@ -100,6 +100,29 @@ Rotated Groq key and Supabase password. Hit another gotcha: Supabase's **"Direct
 
 ### Phase 14 — Cleanup
 Removed stray `~/.git`. Updated README to link the live demo.
+
+### Phase 15 — Post-launch hardening and migration off Railway
+- Tightened the JD skill extractor and matcher prompts further.
+- Dropped the unused `faiss-cpu` dependency to cut build size and runtime memory (it was pulled in but never imported).
+- Added a Render deploy config (`render.yaml`) and a `GET /api/health` endpoint as a second hosting option.
+- Added a `Dockerfile` and Space README and moved backend hosting from Railway to **Hugging Face Spaces** — the Railway free tier's usage limits made the API disappear mid-demo; HF Spaces' free CPU tier runs the same Docker image without that constraint.
+
+### Phase 16 — Production outage + a full bug sweep (single day)
+The backend had gone dark: every request 502'd. Root cause was **Supabase's free-tier auto-pause** — an inactive free-tier Postgres project gets paused automatically, and nothing in the app detected or surfaced that, so the API had been silently crash-looping against a paused database for roughly a month. Fixed by resuming the Supabase project and verifying the pooler connection came back healthy end to end.
+
+While debugging the outage, went through the rest of the app end to end and fixed 9 more correctness/security bugs in the same sitting, all re-verified against the live deployment afterward:
+
+1. **Matcher flakiness** — `matcher.py` wasn't pinning temperature, so the same JD could occasionally get a malformed-JSON response; pinned `temperature=0` and added a re-ask on parse failure.
+2. **Resume upload 500 crash** — a corrupted or non-PDF upload threw an unhandled PyPDF2 exception instead of a clean error; now raises `InvalidPDFError` and the route returns 400.
+3. **Case-sensitive `.pdf` extension check** — the frontend accepted `.PDF` but the backend rejected it, so some legitimate uploads failed silently after passing client-side validation. Made the backend check case-insensitive.
+4. **Dockerfile hardcoded the HF Spaces port** — the image ignored an injected `$PORT` on other Docker hosts, so it would silently fail health checks anywhere but HF Spaces. Now respects `$PORT` with a 7860 fallback.
+5. **No `.dockerignore` in `backend/`** — a local `docker build` from that directory could bake a real `.env` (with `DATABASE_URL`, `GROQ_API_KEY`) into an image layer. Added one.
+6. **Stale JD text on job switch** — in `Analyze.jsx`, switching the linked-job dropdown to a job with no stored `jd_text` left the *previous* job's JD sitting in the textarea, so an analysis could run — and save — one job's JD against a different job's row. The textarea now clears/syncs on every selection change.
+7. **Case-sensitive status filter** — `GET /api/jobs` compared `status` case-sensitively, while the chat agent's `query_applications` tool lowercased the same filter before comparing against the lowercase-stored column. Identical filter requests returned different results depending on whether they came from the UI or the agent. Lowercased the route's filter to match.
+8. **Un-ranked "most commonly missing" skills** — `get_improvement_suggestions` deduplicated missing skills with a bare `set`, which drops frequency information, so the tool's "most commonly missing" claim wasn't actually ranked by anything. Switched to a frequency counter.
+9. **Analyze page didn't restore saved JD text** — selecting an existing application in the Analyze page didn't populate the textarea from that job's already-saved `jd_text`, forcing a re-paste every time.
+
+Also added in the same pass: an optional shared-secret `X-API-Key` auth check on every `/api/*` route (`app/auth.py`), and a `get_resume_skills` agent tool so the chat agent can answer "what skills do I have" questions directly instead of only through `/api/analyze`.
 
 ---
 
@@ -230,6 +253,15 @@ Message list + input + Send button + 4 suggestion chips shown only when the conv
 | 8 | Railway couldn't see the GitHub repo | Railway's GitHub App had limited repo access | Granted "All repositories" via GitHub App settings |
 | 9 | Railway build failed | `langchain-text-splitters==0.2.4` required `langchain-core<0.3` but langchain 1.x needs `>=1.2` | Removed the unused dep from requirements.txt |
 | 10 | Backend crashed after password rotation | Supabase "Direct connection" URL is IPv6-only; Railway is IPv4 | Used Transaction Pooler URL (`pooler.supabase.com`, port 6543) |
+| 11 | **Full production outage** — every request 502'd for about a month | Supabase free-tier project auto-paused from inactivity; nothing detected or surfaced it | Resumed the Supabase project, re-verified the pooler connection end to end |
+| 12 | Matcher occasionally returned malformed JSON | `matcher.py` didn't pin LLM temperature | Pinned `temperature=0`, added a re-ask on parse failure |
+| 13 | Resume upload 500'd on bad files | Corrupted/non-PDF upload threw an unhandled PyPDF2 exception | Raise `InvalidPDFError`, route returns a clean 400 |
+| 14 | Some valid PDFs rejected by the server | Backend's `.pdf` extension check was case-sensitive; frontend's wasn't | Made the backend check case-insensitive |
+| 15 | Docker image could fail health checks off HF Spaces | `Dockerfile` hardcoded the HF Spaces port instead of respecting `$PORT` | Respect `$PORT` with a 7860 fallback |
+| 16 | Local Docker build could leak real secrets into an image layer | No `.dockerignore` in `backend/` | Added `backend/.dockerignore` |
+| 17 | Analyze could save one job's JD against a different job's row | Switching the linked-job dropdown didn't clear/resync the JD textarea | Textarea now clears/syncs on every selection change |
+| 18 | `GET /api/jobs?status=` and the chat agent's status filter disagreed | Route compared status case-sensitively; agent tool lowercased first | Lowercased the route's filter to match |
+| 19 | "Most commonly missing" skills weren't actually ranked | `get_improvement_suggestions` deduped with a bare `set`, discarding frequency | Switched to a frequency counter |
 
 ---
 
@@ -274,11 +306,13 @@ Every Vercel preview deployment gets a different subdomain. Hardcoding origins m
 | Frontend pages | 5 |
 | Backend routes | 10 endpoints across 4 routers |
 | LLM calls per "Analyze" | 2 (extract JD + semantic match) |
-| Agent tools | 4 (query, stats, analysis, suggestions) |
+| Agent tools | 5 (query applications, resume skills, statistics, latest analysis, improvement suggestions) |
 | Skill extraction jump | 44 regex → 52 LLM |
 | Match score fix (legal-AI JD) | 43% → 80% |
 | Hermeus match after extractor fix | 100%/0% coin-flip → stable 14% |
 | Groq retry attempts | 3 |
+| Production outage root cause | Supabase free-tier auto-pause, ~1 month undetected |
+| Bugs fixed in the outage/hardening pass | 9 (see Phase 16) |
 
 ---
 
@@ -292,5 +326,5 @@ Every Vercel preview deployment gets a different subdomain. Hardcoding origins m
 
 1. **FAISS semantic search over resume bullets** — so the analyzer can say *"Your Adani bullet on line 3 is the closest existing evidence for this JD's LLM requirement"*, not just "you have LLM experience somewhere."
 2. **Thread-scoped chat memory** via LangGraph checkpointer — so the agent remembers earlier messages.
-3. **Auth** — right now everyone sees the same demo DB. A 50-line `fastapi-users` setup would gate data per-user.
+3. **Per-user auth** — the `X-API-Key` check (Phase 16) only gates the whole API behind one shared secret; everyone who has it still sees the same demo DB. A `fastapi-users` setup would gate data per-user.
 4. **LLM skill extraction caching** — same JD pasted twice calls the LLM twice. A simple SHA of the text → cached skill list in Postgres would cut cost/latency on repeat views.

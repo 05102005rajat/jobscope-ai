@@ -3,9 +3,17 @@
 AI-powered job application tracker with a LangGraph agent. Track applications, upload your resume, paste a job description, and get a semantic match score plus concrete resume-improvement suggestions — all grounded in an LLM that can reason over your actual pipeline.
 
 **Live demo:** https://jobscope-ai-yov1.vercel.app
-**Tech stack:** React · Vite · Tailwind v4 · FastAPI · SQLAlchemy · PostgreSQL (Supabase) · LangGraph · LangChain · Groq (Llama 3.3 70B) · Vercel · Railway
+**Tech stack:** React · Vite · Tailwind v4 · FastAPI · SQLAlchemy · PostgreSQL (Supabase) · LangGraph · LangChain · Groq (Llama 3.3 70B) · Docker · Vercel · Hugging Face Spaces
 
 ---
+
+## Highlights
+
+- **Live, deployed, and actively maintained:** frontend on [Vercel](https://jobscope-ai-yov1.vercel.app), backend on [Hugging Face Spaces](https://rajatc1-jobscope-api.hf.space) (Dockerized FastAPI), Postgres on Supabase.
+- **Diagnosed and recovered a full production outage** caused by Supabase's free-tier auto-pause silently killing the database and putting the backend into a month-long crash loop — plus 9 further correctness and security bugs found across the LangGraph agent, API auth, and frontend in the same pass, all confirmed fixed against the live deployment (see [commit history](https://github.com/05102005rajat/jobscope-ai/commits/main)).
+- **5-tool LangGraph agent, not a keyword router:** `query_applications`, `get_resume_skills`, `get_statistics`, `get_latest_analysis`, and `get_improvement_suggestions`, wired through a genuine `bind_tools` → `ToolNode` graph loop with a retry path for Groq's tool-call quirks.
+- **Semantic skill matching beats exact-string matching:** replacing `set` intersection with an LLM-graded comparison took the same JD from a 43% to an 80% match score by correctly crediting equivalent phrasing (`Azure OpenAI` → `OpenAI`, `LLM` → `LLM APIs`) — see [docs/PROJECT_WALKTHROUGH.md](docs/PROJECT_WALKTHROUGH.md#5-design-decisions-with-real-tradeoffs).
+- **LLM-based extraction over regex:** skill extraction from a real resume went from 44 regex-matched terms to 52 correctly-cased ones, picking up terms a keyword list missed (`TF-IDF`, `SimHash`, `Azure AI Foundry`).
 
 ## Features
 
@@ -13,7 +21,8 @@ AI-powered job application tracker with a LangGraph agent. Track applications, u
 - **Dashboard metrics.** Total applications, interview rate, response rate, average match score — all computed live from the database.
 - **Resume ingestion.** Drag a PDF in; PyPDF2 extracts the text and a Groq LLM returns a normalized list of skills (handles specifics like `TF-IDF`, `SimHash`, `Azure AI Foundry` that a keyword matcher would miss).
 - **JD analysis.** Paste any job description. The same extractor normalizes requirements, ignoring EEO / export-control / hiring-AI boilerplate. A second LLM call does *semantic* skill comparison — `Azure OpenAI` counts as coverage for `OpenAI`, `LLM` counts for `LLM APIs` — and generates concrete, resume-specific rewrite suggestions.
-- **LangGraph chat agent.** Natural-language questions like *"what's my interview rate?"* or *"any apps at Google?"* route through a real `bind_tools` + `ToolNode` loop: the LLM chooses which of four tools to call, the tool hits the database, the loop closes when the LLM stops requesting tools. Handles multi-tool turns in a single response.
+- **LangGraph chat agent.** Natural-language questions like *"what's my interview rate?"* or *"any apps at Google?"* route through a real `bind_tools` + `ToolNode` loop: the LLM chooses which of five tools (`query_applications`, `get_resume_skills`, `get_statistics`, `get_latest_analysis`, `get_improvement_suggestions`) to call, the tool hits the database, the loop closes when the LLM stops requesting tools. Handles multi-tool turns in a single response.
+- **API auth.** Optional shared-secret auth (`X-API-Key` header, checked against an `API_KEY` env var) gates every `/api/*` route; fails open in local dev when unset.
 - **Tight loop:** add a job with a JD pasted → you land on Analyze with it pre-filled → run analysis → match score appears on the Dashboard row.
 
 ## Architecture
@@ -31,9 +40,10 @@ AI-powered job application tracker with a LangGraph agent. Track applications, u
 │    routes/resume.py      PDF upload + parse      │
 │    routes/analysis.py    JD-vs-resume compare    │
 │    routes/chat.py        → LangGraph agent       │
+│    auth.py               X-API-Key gate          │
 │                                                   │
 │  agent/graph.py    bind_tools + ToolNode loop    │
-│  agent/tools.py    4 tools w/ typed args,        │
+│  agent/tools.py    5 tools w/ typed args,        │
 │                    DB session via ContextVar     │
 │                                                   │
 │  utils/jd_parser.py   LLM skill extraction       │
@@ -111,10 +121,12 @@ backend/
     main.py              FastAPI app + CORS
     database.py          SQLAlchemy models (Job, Resume, Analysis)
     models.py            Pydantic request/response schemas
+    auth.py              X-API-Key header check (verify_api_key)
     routes/              jobs · resume · analysis · chat
-    agent/               graph.py · tools.py
+    agent/               graph.py · tools.py (5 tools)
     utils/               jd_parser · matcher · resume_parser
   requirements.txt
+  Dockerfile             HF Spaces deploy image
   .env.example
 
 frontend/
