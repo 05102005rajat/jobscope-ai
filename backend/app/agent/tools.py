@@ -5,7 +5,7 @@ from langchain_core.tools import tool
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import Analysis, Job
+from app.database import Analysis, Job, Resume
 import json
 
 
@@ -54,6 +54,29 @@ def query_applications(
         for j in jobs
     ]
     return f"Found {len(jobs)} applications:\n" + "\n".join(rows)
+
+
+@tool
+def get_resume_skills() -> str:
+    """Return the full list of skills extracted from the user's uploaded resume.
+
+    Use this for any question about what skills the user has, knows, or lists on
+    their resume overall -- as opposed to skills matched/missing for one specific
+    job, which come from get_latest_analysis instead."""
+    db = _db()
+    resume = db.query(Resume).order_by(Resume.uploaded_date.desc()).first()
+    if not resume:
+        return "No resume uploaded yet. Upload one on the Resume page first."
+
+    try:
+        skills = json.loads(resume.skills) if resume.skills else []
+    except (json.JSONDecodeError, TypeError):
+        skills = []
+
+    if not skills:
+        return f"Resume '{resume.filename}' is uploaded but no skills were extracted from it."
+
+    return f"Skills on file from '{resume.filename}' ({len(skills)} total): {', '.join(skills)}"
 
 
 @tool
@@ -139,6 +162,7 @@ def get_improvement_suggestions() -> str:
 
 TOOLS = [
     query_applications,
+    get_resume_skills,
     get_statistics,
     get_latest_analysis,
     get_improvement_suggestions,
