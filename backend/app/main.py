@@ -1,7 +1,10 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from app.auth import verify_api_key
-from app.database import init_db
+from app.database import get_db, init_db
 from app.routes import jobs, analysis, chat, resume
 
 app = FastAPI(
@@ -36,5 +39,12 @@ def root():
 
 
 @app.get("/api/health")
-def health():
-    return {"ok": True}
+def health(db: Session = Depends(get_db)):
+    """Actually touches Postgres so uptime pings keep Supabase's free-tier
+    project from auto-pausing, instead of just confirming the container is up.
+    """
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"database unreachable: {exc}") from exc
+    return {"ok": True, "db": "reachable"}

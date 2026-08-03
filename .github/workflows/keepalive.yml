@@ -1,0 +1,22 @@
+name: Keep Supabase awake
+
+# Supabase's free tier pauses a project after 7 days with no DB activity.
+# /api/health actually runs a query, so pinging it every 2 days keeps the
+# project from ever hitting that window.
+on:
+  schedule:
+    - cron: "0 15 */2 * *" # every 2 days at 15:00 UTC (~8am PT)
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: |
+          status=$(curl -s -o /tmp/resp.txt -w "%{http_code}" https://rajatc1-jobscope-api.hf.space/api/health)
+          cat /tmp/resp.txt
+          if [ "$status" -ne 200 ]; then
+            echo "Health check failed with status $status"
+            exit 1
+          fi
